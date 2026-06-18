@@ -43,6 +43,7 @@ export interface DetectionCandidate {
   estimatedValue: number;
   confidence: number;
   meetsThreshold: boolean;
+  mlLabel?: string;
 }
 
 export interface AppSettings {

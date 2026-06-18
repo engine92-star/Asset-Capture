@@ -1,37 +1,79 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { DetectionPrompt } from '@/components/DetectionPrompt';
 import { Button } from '@/components/ui';
+import { useMLKit } from '@/context/MLKitProvider';
 import { useSettings } from '@/context/SettingsContext';
-import { getScanIntervalMs, scanForCandidates } from '@/lib/detection';
+import { getScanIntervalMs } from '@/lib/detection';
+import { analyzeImageForCandidates, isMlKitAvailable } from '@/lib/ml-detection';
 import { DetectionCandidate } from '@/types/registry';
 import { theme } from '@/constants/theme';
 
 export default function CaptureScreen() {
   const router = useRouter();
   const { settings } = useSettings();
+  const { detector, isReady } = useMLKit();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanning, setScanning] = useState(true);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [candidate, setCandidate] = useState<DetectionCandidate | null>(null);
   const [promptVisible, setPromptVisible] = useState(false);
+  const [lastDetectionLabel, setLastDetectionLabel] = useState<string | null>(null);
   const dismissedRef = useRef<Set<string>>(new Set());
+  const cameraRef = useRef<CameraView>(null);
+  const analyzingRef = useRef(false);
 
   useEffect(() => {
-    if (!scanning || promptVisible) return;
+    if (!scanning || promptVisible || !cameraReady || analyzingRef.current) {
+      return;
+    }
 
-    const interval = setInterval(() => {
-      const results = scanForCandidates(settings);
-      const next = results.find((entry) => !dismissedRef.current.has(entry.id));
-      if (next) {
-        setCandidate(next);
-        setPromptVisible(true);
+    const interval = setInterval(async () => {
+      if (!cameraRef.current || analyzingRef.current || promptVisible) return;
+
+      analyzingRef.current = true;
+      setIsAnalyzing(true);
+
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.35,
+          skipProcessing: true,
+          shutterSound: false,
+        });
+
+        if (!photo?.uri) return;
+
+        const results = await analyzeImageForCandidates(photo.uri, settings, detector);
+        const next = results.find((entry) => {
+          const fingerprint = `${entry.label}-${entry.mlLabel ?? entry.category}`;
+          return !dismissedRef.current.has(entry.id) && fingerprint !== lastDetectionLabel;
+        });
+
+        if (next) {
+          setCandidate(next);
+          setPromptVisible(true);
+          setLastDetectionLabel(`${next.label}-${next.mlLabel ?? next.category}`);
+        }
+      } catch (error) {
+        console.warn('Scan frame failed', error);
+      } finally {
+        analyzingRef.current = false;
+        setIsAnalyzing(false);
       }
     }, getScanIntervalMs(settings));
 
     return () => clearInterval(interval);
-  }, [scanning, promptVisible, settings]);
+  }, [
+    scanning,
+    promptVisible,
+    cameraReady,
+    settings,
+    detector,
+    lastDetectionLabel,
+  ]);
 
   if (!permission) {
     return (
@@ -65,6 +107,7 @@ export default function CaptureScreen() {
         category: candidate.category,
         estimatedValue: String(candidate.estimatedValue),
         meetsThreshold: String(candidate.meetsThreshold),
+        mlLabel: candidate.mlLabel ?? '',
       },
     });
     setCandidate(null);
@@ -78,21 +121,33 @@ export default function CaptureScreen() {
     setCandidate(null);
   };
 
+  const engineLabel =
+    Platform.OS === 'android' && isMlKitAvailable() && isReady
+      ? 'ML Kit on-device'
+      : Platform.OS === 'android' && isMlKitAvailable()
+        ? 'ML Kit loading…'
+        : 'Simulator fallback';
+
   return (
     <View style={styles.container}>
-      <CameraView style={styles.camera} facing="back">
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing="back"
+        onCameraReady={() => setCameraReady(true)}>
         <View style={styles.overlay}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Scanning mode</Text>
             <Text style={styles.headerSubtitle}>
-              Walk slowly. High-value items will trigger capture prompts.
+              Walk slowly. ML Kit analyzes camera frames for high-value items.
             </Text>
+            <Text style={styles.engineBadge}>Engine: {engineLabel}</Text>
           </View>
 
           <View style={styles.reticle}>
             <View style={styles.reticleCorner} />
             <Text style={styles.reticleText}>
-              {scanning ? 'Analyzing scene…' : 'Scan paused'}
+              {isAnalyzing ? 'Analyzing frame…' : scanning ? 'Watching scene…' : 'Scan paused'}
             </Text>
           </View>
 
@@ -146,6 +201,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
     lineHeight: 20,
+  },
+  engineBadge: {
+    color: '#9FD0FF',
+    fontSize: 12,
+    marginTop: 8,
+    fontWeight: '600',
   },
   reticle: {
     alignSelf: 'center',

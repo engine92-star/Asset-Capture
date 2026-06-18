@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { MLKitProvider } from '@/context/MLKitProvider';
 import { RegistryProvider } from '@/context/RegistryContext';
 import { SettingsProvider } from '@/context/SettingsContext';
 
@@ -44,6 +45,7 @@ function RootLayoutNav() {
   return (
     <SettingsProvider>
       <RegistryProvider>
+        <MLKitProvider>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -54,6 +56,7 @@ function RootLayoutNav() {
             <Stack.Screen name="item/[id]" options={{ title: 'Item Details' }} />
           </Stack>
         </ThemeProvider>
+        </MLKitProvider>
       </RegistryProvider>
     </SettingsProvider>
   );

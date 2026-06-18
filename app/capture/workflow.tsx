@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Button, Field, Label, Screen, Subtitle, Title } from '@/components/ui';
 import { useRegistry } from '@/context/RegistryContext';
 import { useSettings } from '@/context/SettingsContext';
+import { isOcrAvailable, recognizeIdTagFromImage } from '@/lib/ocr';
 import { shouldRegisterItem } from '@/lib/thresholds';
 import { ItemCondition, RegistryItem, RegistryType } from '@/types/registry';
 import { theme } from '@/constants/theme';
@@ -59,6 +60,7 @@ export default function CaptureWorkflowScreen() {
   const [annualCost, setAnnualCost] = useState('');
   const [notes, setNotes] = useState('');
   const [customFields, setCustomFields] = useState<{ id: string; label: string; value: string }[]>([]);
+  const [ocrRunning, setOcrRunning] = useState(false);
 
   const step = STEPS[stepIndex];
   const progress = useMemo(() => ((stepIndex + 1) / STEPS.length) * 100, [stepIndex]);
@@ -79,8 +81,23 @@ export default function CaptureWorkflowScreen() {
       const uri = result.assets[0].uri;
       if (target === 'photos') {
         setPhotos((current) => [...current, uri]);
-      } else {
-        setIdTagPhotos((current) => [...current, uri]);
+        return;
+      }
+
+      setIdTagPhotos((current) => [...current, uri]);
+
+      if (!isOcrAvailable()) return;
+
+      setOcrRunning(true);
+      try {
+        const parsed = await recognizeIdTagFromImage(uri);
+        if (parsed.serialNumber) setSerialNumber(parsed.serialNumber);
+        if (parsed.model) setModel(parsed.model);
+        if (parsed.make) setMake(parsed.make);
+        if (parsed.year) setYear(parsed.year);
+        if (parsed.markings) setMarkings(parsed.markings);
+      } finally {
+        setOcrRunning(false);
       }
     }
   };
@@ -186,6 +203,13 @@ export default function CaptureWorkflowScreen() {
               Capture serial plates, asset tags, manufacturer labels, and any identifying markings.
             </Text>
             <Button label="Capture ID tag photo" onPress={() => takePhoto('idTagPhotos')} />
+            {ocrRunning ? (
+              <Text style={styles.help}>Reading ID tag with ML Kit OCR…</Text>
+            ) : (
+              <Text style={styles.help}>
+                OCR auto-fills serial numbers, make, model, and year when detected.
+              </Text>
+            )}
             <PhotoGrid uris={idTagPhotos} />
             <Field label="Serial / asset tag number" value={serialNumber} onChangeText={setSerialNumber} />
             <Field label="Markings or engravings" value={markings} onChangeText={setMarkings} multiline />

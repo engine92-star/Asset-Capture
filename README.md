@@ -19,18 +19,23 @@ Asset-Capture is a mobile app for identifying, documenting, and tracking high-va
 
 ## Getting Started
 
+ML Kit requires a **development build** (it does not run in Expo Go).
+
 ```bash
 cd Asset-Capture
 npm install
-npm start
+npm run prebuild
+npm run android
 ```
 
-Then scan the QR code with Expo Go on your phone, or run:
+For day-to-day development after the first native build:
 
 ```bash
-npm run android
-npm run ios
+npm start
+npm run android:dev
 ```
+
+Connect your Android device with USB debugging enabled, or use an emulator with a camera feed.
 
 ## Project Structure
 
@@ -45,9 +50,20 @@ lib/               # Threshold logic, storage, detection engine
 types/             # Shared TypeScript types
 ```
 
-## Detection Engine
+## Detection Engine (Phase 1 — ML Kit)
 
-The current detection layer uses a catalog-based scanner that simulates on-device identification during walkthrough mode. It is structured so a production ML model (Apple Vision, Google ML Kit, or a cloud vision API) can replace `lib/detection.ts` without changing the UI workflow.
+**Android (primary):** Scan mode captures camera frames and runs Google ML Kit object detection on-device via `@infinitered/react-native-mlkit-object-detection`. Detected labels are mapped to asset categories and estimated values in `lib/label-map.ts`, then filtered against your capitalization threshold.
+
+**ID tag OCR:** During capture workflow, `@infinitered/react-native-mlkit-text-recognition` reads serial plates and auto-fills make, model, year, and markings.
+
+**Fallback:** If ML Kit is unavailable (web, model still loading), the app falls back to the catalog simulator in `lib/detection.ts`.
+
+Key files:
+
+- `lib/ml-detection.ts` — frame analysis pipeline
+- `lib/label-map.ts` — ML label → asset category/value mapping
+- `lib/ocr.ts` — ID tag text recognition and parsing
+- `context/MLKitProvider.tsx` — loads the default ML Kit object detector
 
 ## Threshold Logic
 

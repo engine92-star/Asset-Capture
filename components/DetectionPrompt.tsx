@@ -36,6 +36,9 @@ export function DetectionPrompt({
           <Text style={styles.meta}>
             Category: {candidate.category} · Est. value {formatCurrency(candidate.estimatedValue)}
           </Text>
+          {candidate.mlLabel ? (
+            <Text style={styles.meta}>ML Kit detected: {candidate.mlLabel}</Text>
+          ) : null}
           <Text style={styles.meta}>
             Confidence {(candidate.confidence * 100).toFixed(0)}%
           </Text>
