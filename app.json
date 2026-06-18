@@ -7,9 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "assetcapture",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -27,6 +24,19 @@
     "plugins": [
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Asset-Capture to use your camera to identify assets and liabilities while you walk through a location."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Asset-Capture to save item photos to your registry.",
+          "cameraPermission": "Allow Asset-Capture to capture photos of assets, ID tags, and markings."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
@@ -35,6 +45,13 @@
         }
       ]
     ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Asset-Capture uses the camera to identify and document high-value assets and liabilities.",
+        "NSPhotoLibraryUsageDescription": "Asset-Capture saves photos of captured assets and ID tags."
+      }
+    },
     "experiments": {
       "typedRoutes": true
     }
